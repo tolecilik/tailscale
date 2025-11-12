@@ -1,0 +1,104 @@
+name: RDP Realtime Telegram
+
+on:
+  workflow_dispatch:
+
+jobs:
+  secure-rdp:
+    runs-on: windows-latest
+    timeout-minutes: 3600
+
+    steps:
+      - name: ⚙️ Konfigurasi RDP
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
+          Restart-Service -Name TermService -Force
+
+      - name: 👤 Buat User RDP
+        run: |
+          Add-Type -AssemblyName System.Security
+          $chars = ([char[]](33..126))
+          $password = -join (Get-Random -InputObject $chars -Count 12)
+          $secure = ConvertTo-SecureString $password -AsPlainText -Force
+          New-LocalUser -Name "RDP" -Password $secure -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "RDP"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
+          echo "RDP_PASSWORD=$password" >> $env:GITHUB_ENV
+
+      - name: 🌐 Instal & Hubungkan ke Tailscale
+        env:
+          TELEGRAM_TOKEN: "8486806866:AAGj6rRSNwumsDdXi95E5GNsO8DVCOMmAG4"
+          CHAT_ID: "927182146"
+          TAILSCALE_AUTH_KEY: "tskey-auth-kBfJ8CELfc11CNTRL-r6Zt3BhQRQGugSYyLM8fQGRy4o2PYmr3"
+        run: |
+          function Send-TG($msg) {
+            curl -s -X POST "https://api.telegram.org/bot$env:TELEGRAM_TOKEN/sendMessage" -d chat_id=$env:CHAT_ID -d text="$msg"
+          }
+
+          Send-TG "📦 Menginstal Tailscale..."
+          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $file = "$env:TEMP\tailscale.msi"
+          Invoke-WebRequest -Uri $url -OutFile $file
+          Start-Process msiexec.exe -ArgumentList "/i `"$file`" /quiet /norestart" -Wait
+          Remove-Item $file -Force
+          Send-TG "✅ Tailscale berhasil diinstal."
+
+          Send-TG "🔌 Menghubungkan ke jaringan Tailscale..."
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=$env:TAILSCALE_AUTH_KEY --hostname=gh-node-$env:GITHUB_RUN_ID
+
+          $tsIP = $null
+          $tries = 0
+          while (-not $tsIP -and $tries -lt 10) {
+            $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+            Start-Sleep -Seconds 3
+            $tries++
+          }
+
+          if (-not $tsIP) {
+            Send-TG "⚠️ Gagal mendapatkan IP Tailscale."
+            exit 1
+          }
+
+          Send-TG "🌐 Koneksi Tailscale aktif!`n💻 IP: $tsIP"
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+
+      - name: 🟢 Aktifkan RDP dan Notifikasi Realtime
+        env:
+          TELEGRAM_TOKEN: "8486806866:AAGj6rRSNwumsDdXi95E5GNsO8DVCOMmAG4"
+          CHAT_ID: "927182146"
+          RDP_PASSWORD: ${{ env.RDP_PASSWORD }}
+          TAILSCALE_IP: ${{ env.TAILSCALE_IP }}
+        run: |
+          $start = Get-Date
+
+          function Send-TG($msg) {
+            curl -s -X POST "https://api.telegram.org/bot$env:TELEGRAM_TOKEN/sendMessage" -d chat_id=$env:CHAT_ID -d text="$msg"
+          }
+
+          Send-TG "🟢 *RDP AKTIF!*`n💻 IP: $env:TAILSCALE_IP`n👤 User: RDP`n🔑 Password: $env:RDP_PASSWORD`n\nKoneksi aktif selama workflow berjalan."
+
+          $minutes = 0
+          while ($true) {
+            $minutes++
+            $elapsed = (Get-Date) - $start
+            $msg = "⏱️ RDP masih aktif... $($elapsed.Hours) jam, $($elapsed.Minutes) menit berjalan."
+            Send-TG $msg
+            Start-Sleep -Seconds 60
+          }
+
+      - name: 🧭 Notifikasi Akhir (jika job berhenti)
+        if: always()
+        env:
+          TELEGRAM_TOKEN: "8486806866:AAGj6rRSNwumsDdXi95E5GNsO8DVCOMmAG4"
+          CHAT_ID: "927182146"
+        run: |
+          $status = "${{ job.status }}"
+          if ($status -eq "success") {
+            $msg = "✅ Workflow selesai dengan sukses."
+          } else {
+            $msg = "⚠️ Workflow berhenti atau gagal dijalankan."
+          }
+          curl -s -X POST "https://api.telegram.org/bot$env:TELEGRAM_TOKEN/sendMessage" -d chat_id=$env:CHAT_ID -d text="$msg"
