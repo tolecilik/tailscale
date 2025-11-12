@@ -115,7 +115,19 @@ jobs:
 
           Send-TG "🟢 *RDP AKTIF!*\n💻 IP: $ip\n👤 User: RDP\n🔑 Password: $pass\n\nKoneksi aktif selama workflow berjalan."
 
-          while ($true) {
-              Write-Host "[$(Get-Date)] RDP aktif..."
-              Start-Sleep -Seconds 300
+          $startTime = Get-Date
+          try {
+              while ($true) {
+                  $elapsed = (Get-Date) - $startTime
+                  $timeStr = "{0:D2}h {1:D2}m {2:D2}s" -f $elapsed.Hours, $elapsed.Minutes, $elapsed.Seconds
+                  $logMsg = "[$(Get-Date -Format 'HH:mm:ss')] RDP aktif..."
+                  Write-Host $logMsg
+                  Send-TG "$logMsg`n⏱ Waktu berjalan: $timeStr"
+                  Start-Sleep -Seconds 300
+              }
+          }
+          finally {
+              $elapsed = (Get-Date) - $startTime
+              $finalTime = "{0:D2}h {1:D2}m {2:D2}s" -f $elapsed.Hours, $elapsed.Minutes, $elapsed.Seconds
+              Send-TG "🔴 Workflow telah berhenti.`n⏱ Total waktu aktif: $finalTime"
           }
