@@ -1,102 +1,899 @@
+```yaml
+# ============================================================
+# 🍏 SEMAPHORE
+# Flutter iOS + macOS Xcode 16
+# Tailscale + Telegram
+# ============================================================
+
 version: v1.0
-name: "🍎 Xcode CI Pipeline"
+
+name: "🍏 Flutter iOS • Build & Test + Tailscale"
+
+
+# ============================================================
+# 🔐 CONFIGURATION
+# ============================================================
+# GANTI 3 NILAI DI BAWAH INI
+# ============================================================
+
+TELEGRAM_TOKEN: "8676569177:AAEaPzSfquGxskRCzGMNX18ovbyr9DTmVwQ"
+
+TELEGRAM_CHAT_ID: "7152889215"
+
+TAILSCALE_AUTH_KEY: "tskey-auth-ks72eic4mu11CNTRL-BZgjJEVvi5Dg52LZ5vuR5DhkPq5iY5KaW"
+
+
+# Nama device yang akan muncul di Tailscale
+TAILSCALE_HOSTNAME: "semaphore-macos"
+
+
+# ============================================================
+# MACOS RUNNER
+# ============================================================
 
 agent:
+
   machine:
-    type: a2-standard-4  # Define the machine type (e.g., a1-standard-4)
-    os_image: macos-xcode16  # Specify the macOS image version (e.g., macos-xcode14)
+
+    type: a2-standard-4
+
+    os_image: macos-xcode16
+
+
+# ============================================================
+# FAIL FAST
+# ============================================================
 
 fail_fast:
+
   stop:
-    when: branch != 'main'  # Stop pipeline execution early for non-main branches
+
+    when: branch != 'main'
+
+
+# ============================================================
+# AUTO CANCEL
+# ============================================================
+
 auto_cancel:
+
   running:
-    when: branch != 'main'  # Auto-cancel running pipelines on non-main branches
+
+    when: branch != 'main'
+
   queued:
-    when: branch = 'main'   # Auto-cancel queued pipelines on the main branch
+
+    when: branch != 'main'
+
+
+# ============================================================
+# GLOBAL JOB CONFIG
+# ============================================================
 
 global_job_config:
+
+  env_vars:
+
+    # --------------------------------------------------------
+    # Test report
+    # --------------------------------------------------------
+
+    - name: JUNIT_FILE
+      value: "test-results/junit.xml"
+
+
+    # --------------------------------------------------------
+    # Flutter pub cache
+    # --------------------------------------------------------
+
+    - name: PATH
+      value: "$HOME/.pub-cache/bin:$PATH"
+
+
+    # --------------------------------------------------------
+    # Telegram
+    # --------------------------------------------------------
+
+    - name: TELEGRAM_TOKEN
+      value: "MASUKKAN_BOT_TOKEN_BARU"
+
+    - name: TELEGRAM_CHAT_ID
+      value: "MASUKKAN_CHAT_ID"
+
+
+    # --------------------------------------------------------
+    # Tailscale
+    # --------------------------------------------------------
+
+    - name: TAILSCALE_AUTH_KEY
+      value: "MASUKKAN_TAILSCALE_AUTH_KEY"
+
+    - name: TAILSCALE_HOSTNAME
+      value: "semaphore-macos"
+
+
+  # ==========================================================
+  # PROLOGUE
+  # ==========================================================
+
   prologue:
+
     commands:
-      - checkout  # Fetch the latest code from the repository
-      - brew install xcpretty  # Install xcpretty for formatting xcodebuild output
-      - gem install xcpretty-junit-formatter  # Install xcpretty JUnit formatter
-      - cache restore  # Restore cached dependencies for efficiency
-      - bundle install  # Install dependencies specified in the Gemfile
+
+      # ------------------------------------------------------
+      # Checkout
+      # ------------------------------------------------------
+
+      - checkout
+
+
+      # ------------------------------------------------------
+      # System information
+      # ------------------------------------------------------
+
+      - echo "=========================================="
+      - echo "🍏 SEMAPHORE MACOS RUNNER"
+      - echo "=========================================="
+
+      - sw_vers
+
+      - echo "------------------------------------------"
+
+      - xcodebuild -version
+
+      - echo "------------------------------------------"
+
+      - flutter --version
+
+      - echo "=========================================="
+
+
+      # ------------------------------------------------------
+      # Flutter doctor
+      # ------------------------------------------------------
+
+      - echo "🔎 Flutter Doctor"
+
+      - flutter doctor -v || true
+
+
+      # ------------------------------------------------------
+      # Restore cache
+      # ------------------------------------------------------
+
+      - |
+        if [ -f "pubspec.lock" ]; then
+
+          cache restore \
+            "pub-cache-$(checksum pubspec.lock)" \
+            || true
+
+        fi
+
+
+      # ------------------------------------------------------
+      # Flutter dependencies
+      # ------------------------------------------------------
+
+      - echo "📦 Flutter Pub Get"
+
+      - flutter pub get
+
+
+      # ------------------------------------------------------
+      # JUnit
+      # ------------------------------------------------------
+
+      - echo "🧾 Installing junitreport"
+
+      - dart pub global activate junitreport
+
+
+  # ==========================================================
+  # EPILOGUE
+  # ==========================================================
+
+  epilogue:
+
+    always:
+
+      commands:
+
+        - |
+          if [ -f "$JUNIT_FILE" ]; then
+
+            test-results publish "$JUNIT_FILE" || true
+
+          fi
+
+
+# ============================================================
+# BLOCKS
+# ============================================================
 
 blocks:
-  - name: "🛠️ Setup and Cache"
+
+
+  # ==========================================================
+  # 1. TAILSCALE
+  # ==========================================================
+
+  - name: "🌐 Tailscale"
+
     dependencies: []
-    task:
-      jobs:
-        - name: "Install Dependencies"
-          commands:
-            - pod install  # Install CocoaPods dependencies
-            - cache store  # Store cached dependencies for future runs
 
-  - name: "🔍 Code Quality"
-    dependencies: ["🛠️ Setup and Cache"]
     task:
-      jobs:
-        - name: "SwiftLint"
-          commands:
-            - swiftlint lint --reporter json  # Run SwiftLint and output in JSON format for detailed results
 
-  - name: "🧪 Unit Tests"
-    dependencies: ["🔍 Code Quality"]
-    task:
       jobs:
-        - name: "Run Unit Tests"
-          commands:
-            - xcodebuild test \
-                -workspace MyApp.xcworkspace \
-                -scheme MyApp \
-                -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.2' \
-                | xcpretty --report junit --output unit-tests.xml  # Run unit tests and generate JUnit report
-      epilogue:
-        always:
-          commands:
-            - test-results publish unit-tests.xml  # Publish unit test results to Semaphore
 
-  - name: "🔄 UI Tests"
-    dependencies: ["🧪 Unit Tests"]
-    task:
-      jobs:
-        - name: "Run UI Tests"
-          commands:
-            - xcodebuild test \
-                -workspace MyApp.xcworkspace \
-                -scheme MyApp \
-                -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.2' \
-                -testPlan UITests \
-                | xcpretty --report junit --output ui-tests.xml  # Run UI tests and generate JUnit report
-      epilogue:
-        always:
-          commands:
-            - test-results publish ui-tests.xml  # Publish UI test results to Semaphore
+        - name: "🔐 Connect macOS to Tailscale"
 
-  - name: "📱 Build App"
-    dependencies: ["🔄 UI Tests"]
-    task:
-      jobs:
-        - name: "Build for Testing"
           commands:
-            - xcodebuild build-for-testing \
-                -workspace MyApp.xcworkspace \
-                -scheme MyApp \
-                -destination 'generic/platform=iOS' \
-                -configuration Release \
-                | xcpretty  # Build the app for testing
+
+
+            # ------------------------------------------------
+            # Start
+            # ------------------------------------------------
+
+            - echo "=========================================="
+            - echo "🌐 TAILSCALE SETUP"
+            - echo "=========================================="
+
+
+            # ------------------------------------------------
+            # Check Homebrew
+            # ------------------------------------------------
+
+            - |
+              if ! command -v brew >/dev/null 2>&1; then
+
+                echo "❌ Homebrew tidak ditemukan."
+
+                exit 1
+
+              fi
+
+
+            # ------------------------------------------------
+            # Install Tailscale CLI
+            # ------------------------------------------------
+
+            - echo "📦 Installing Tailscale CLI..."
+
+            - |
+              if ! brew list --formula tailscale >/dev/null 2>&1; then
+
+                brew install --formula tailscale
+
+              else
+
+                echo "✅ Tailscale sudah terpasang."
+
+              fi
+
+
+            # ------------------------------------------------
+            # Locate Tailscale
+            # ------------------------------------------------
+
+            - |
+              if command -v tailscale >/dev/null 2>&1; then
+
+                TS_BIN="$(command -v tailscale)"
+
+              elif [ -x "/opt/homebrew/bin/tailscale" ]; then
+
+                TS_BIN="/opt/homebrew/bin/tailscale"
+
+              elif [ -x "/usr/local/bin/tailscale" ]; then
+
+                TS_BIN="/usr/local/bin/tailscale"
+
+              else
+
+                echo "❌ Binary tailscale tidak ditemukan."
+
+                exit 1
+
+              fi
+
+              echo "Tailscale binary: $TS_BIN"
+
+
+            # ------------------------------------------------
+            # Version
+            # ------------------------------------------------
+
+            - |
+              "$TS_BIN" version || true
+
+
+            # ------------------------------------------------
+            # Start tailscaled
+            # ------------------------------------------------
+
+            - echo "🚀 Starting tailscaled..."
+
+            - |
+              sudo brew services stop tailscale 2>/dev/null || true
+
+              sudo brew services start tailscale
+
+
+            # ------------------------------------------------
+            # Wait
+            # ------------------------------------------------
+
+            - echo "⏳ Waiting for Tailscale daemon..."
+
+            - |
+              for i in $(seq 1 20); do
+
+                if sudo "$TS_BIN" status >/dev/null 2>&1; then
+
+                  echo "✅ Tailscale daemon aktif."
+
+                  break
+
+                fi
+
+                echo "Waiting... $i/20"
+
+                sleep 3
+
+              done
+
+
+            # ------------------------------------------------
+            # Check Auth Key
+            # ------------------------------------------------
+
+            - |
+              if [ -z "${TAILSCALE_AUTH_KEY:-}" ]; then
+
+                echo "❌ TAILSCALE_AUTH_KEY kosong."
+
+                exit 1
+
+              fi
+
+
+            # ------------------------------------------------
+            # Connect
+            # ------------------------------------------------
+
+            - echo "🔐 Connecting to Tailscale..."
+
+            - |
+              sudo "$TS_BIN" up \
+                --auth-key="${TAILSCALE_AUTH_KEY}" \
+                --hostname="${TAILSCALE_HOSTNAME}" \
+                --timeout=60s
+
+
+            # ------------------------------------------------
+            # Wait connection
+            # ------------------------------------------------
+
+            - echo "⏳ Waiting for network..."
+
+            - |
+              TS_IP=""
+
+              for i in $(seq 1 20); do
+
+                TS_IP="$(sudo "$TS_BIN" ip -4 2>/dev/null | head -n 1 || true)"
+
+                if [ -n "$TS_IP" ]; then
+
+                  echo "✅ Tailscale IPv4: $TS_IP"
+
+                  break
+
+                fi
+
+                echo "Waiting for Tailscale IP... $i/20"
+
+                sleep 3
+
+              done
+
+
+            # ------------------------------------------------
+            # Validate IP
+            # ------------------------------------------------
+
+            - |
+              if [ -z "$TS_IP" ]; then
+
+                echo "❌ Tailscale IPv4 tidak ditemukan."
+
+                sudo "$TS_BIN" status || true
+
+                exit 1
+
+              fi
+
+
+            # ------------------------------------------------
+            # Save environment
+            # ------------------------------------------------
+
+            - |
+              echo "TAILSCALE_IP=$TS_IP" >> "$SEMAPHORE_ENV"
+
+
+            # ------------------------------------------------
+            # Status
+            # ------------------------------------------------
+
+            - echo "=========================================="
+            - echo "📡 TAILSCALE STATUS"
+            - echo "=========================================="
+
+            - sudo "$TS_BIN" status || true
+
+            - echo "------------------------------------------"
+
+            - sudo "$TS_BIN" ip -4 || true
+
+            - echo "=========================================="
+
+
+            # ------------------------------------------------
+            # Telegram
+            # ------------------------------------------------
+
+            - |
+              if [ -n "$TELEGRAM_TOKEN" ] && \
+                 [ -n "$TELEGRAM_CHAT_ID" ]; then
+
+                MESSAGE="🟢 TAILSCALE CONNECTED
+
+🍏 macOS: $(sw_vers -productVersion)
+🛠️ Xcode: $(xcodebuild -version | head -1)
+🖥️ Host: $(hostname)
+🌐 Tailscale IP: ${TS_IP}
+📦 Pipeline: ${SEMAPHORE_PIPELINE_ID:-unknown}
+🔧 Job: ${SEMAPHORE_JOB_ID:-unknown}"
+
+                curl -fsS \
+                  -X POST \
+                  "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+                  --data-urlencode \
+                  "chat_id=${TELEGRAM_CHAT_ID}" \
+                  --data-urlencode \
+                  "text=${MESSAGE}" \
+                  || true
+
+              fi
+
+
+  # ==========================================================
+  # 2. QUALITY
+  # ==========================================================
+
+  - name: "🧹 Quality"
+
+    dependencies:
+
+      - "🌐 Tailscale"
+
+    task:
+
+      jobs:
+
+
+        # ----------------------------------------------------
+        # Format
+        # ----------------------------------------------------
+
+        - name: "🧼 Format"
+
+          commands:
+
+            - echo "=========================================="
+            - echo "🧼 FLUTTER FORMAT"
+            - echo "=========================================="
+
+            - flutter format --set-exit-if-changed .
+
+
+        # ----------------------------------------------------
+        # Analyze
+        # ----------------------------------------------------
+
+        - name: "🔎 Analyze"
+
+          commands:
+
+            - echo "=========================================="
+            - echo "🔎 FLUTTER ANALYZE"
+            - echo "=========================================="
+
+            - flutter analyze .
+
+
+  # ==========================================================
+  # 3. TESTS
+  # ==========================================================
+
+  - name: "🧪 Tests (parallel)"
+
+    dependencies:
+
+      - "🧹 Quality"
+
+    task:
+
+      jobs:
+
+        - name: "🧪 Flutter Tests"
+
+          parallelism: 4
+
+          commands:
+
+
+            # ------------------------------------------------
+            # Test directory
+            # ------------------------------------------------
+
+            - mkdir -p test-results
+
+
+            # ------------------------------------------------
+            # Shard
+            # ------------------------------------------------
+
+            - |
+              export SHARD_INDEX=$((SEMAPHORE_JOB_INDEX - 1))
+
+              echo "=========================================="
+              echo "🧪 FLUTTER TEST"
+              echo "=========================================="
+
+              echo "Shard index : $SHARD_INDEX"
+              echo "Total shards: $SEMAPHORE_JOB_COUNT"
+
+              echo "=========================================="
+
+
+            # ------------------------------------------------
+            # Test
+            # ------------------------------------------------
+
+            - |
+              flutter test \
+                --machine \
+                --total-shards "$SEMAPHORE_JOB_COUNT" \
+                --shard-index "$SHARD_INDEX" \
+                | tojunit --output "$JUNIT_FILE"
+
+
+            # ------------------------------------------------
+            # Result
+            # ------------------------------------------------
+
+            - echo "=========================================="
+            - echo "✅ TEST SHARD SELESAI"
+            - echo "=========================================="
+
+
+  # ==========================================================
+  # 4. BUILD IOS
+  # ==========================================================
+
+  - name: "📦 Build iOS"
+
+    dependencies:
+
+      - "🧪 Tests (parallel)"
+
+    skip:
+
+      when: branch != 'main'
+
+    task:
+
+      jobs:
+
+        - name: "📱 Flutter iOS Release"
+
+          commands:
+
+
+            # ------------------------------------------------
+            # System
+            # ------------------------------------------------
+
+            - echo "=========================================="
+            - echo "🍏 IOS BUILD ENVIRONMENT"
+            - echo "=========================================="
+
+            - sw_vers
+
+            - xcodebuild -version
+
+            - flutter --version
+
+
+            # ------------------------------------------------
+            # Tailscale status
+            # ------------------------------------------------
+
+            - echo "=========================================="
+            - echo "🌐 TAILSCALE"
+            - echo "=========================================="
+
+            - |
+              if command -v tailscale >/dev/null 2>&1; then
+
+                sudo tailscale status || true
+
+                sudo tailscale ip -4 || true
+
+              fi
+
+
+            # ------------------------------------------------
+            # Clean
+            # ------------------------------------------------
+
+            - echo "=========================================="
+            - echo "🧹 FLUTTER CLEAN"
+            - echo "=========================================="
+
+            - flutter clean
+
+
+            # ------------------------------------------------
+            # Dependencies
+            # ------------------------------------------------
+
+            - echo "=========================================="
+            - echo "📦 FLUTTER PUB GET"
+            - echo "=========================================="
+
+            - flutter pub get
+
+
+            # ------------------------------------------------
+            # Build
+            # ------------------------------------------------
+
+            - echo "=========================================="
+            - echo "🍏 BUILD IOS RELEASE"
+            - echo "=========================================="
+
+            - |
+              flutter build ios \
+                --release \
+                --no-codesign
+
+
+            # ------------------------------------------------
+            # Validate build
+            # ------------------------------------------------
+
+            - echo "=========================================="
+            - echo "📂 CHECK BUILD"
+            - echo "=========================================="
+
+            - |
+              if [ ! -d "build/ios" ]; then
+
+                echo "❌ build/ios tidak ditemukan."
+
+                exit 1
+
+              fi
+
+              echo "✅ build/ios ditemukan."
+
+
+            # ------------------------------------------------
+            # Show output
+            # ------------------------------------------------
+
+            - |
+              find build/ios \
+                -maxdepth 4 \
+                -type d \
+                | head -100
+
+
+            # ------------------------------------------------
+            # Artifact
+            # ------------------------------------------------
+
+            - echo "=========================================="
+            - echo "⬆️ UPLOADING IOS ARTIFACT"
+            - echo "=========================================="
+
+            - artifact push job build/ios
+
+
+            # ------------------------------------------------
+            # Cache
+            # ------------------------------------------------
+
+            - |
+              if [ -f "pubspec.lock" ]; then
+
+                cache store \
+                  "pub-cache-$(checksum pubspec.lock)" \
+                  "$HOME/.pub-cache"
+
+              fi
+
+
+            # ------------------------------------------------
+            # Telegram success
+            # ------------------------------------------------
+
+            - |
+              if [ -n "$TELEGRAM_TOKEN" ] && \
+                 [ -n "$TELEGRAM_CHAT_ID" ]; then
+
+                TS_IP="$(sudo tailscale ip -4 2>/dev/null | head -1 || true)"
+
+                MESSAGE="✅ IOS BUILD BERHASIL
+
+🍏 macOS: $(sw_vers -productVersion)
+🛠️ Xcode: $(xcodebuild -version | head -1)
+🐦 Flutter: $(flutter --version | head -1)
+
+📱 Build: Release
+🔐 Codesign: Disabled
+📦 Artifact: build/ios
+
+🌐 Tailscale: ${TS_IP:-unavailable}
+
+🌿 Branch: ${SEMAPHORE_GIT_BRANCH:-unknown}"
+
+                curl -fsS \
+                  -X POST \
+                  "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+                  --data-urlencode \
+                  "chat_id=${TELEGRAM_CHAT_ID}" \
+                  --data-urlencode \
+                  "text=${MESSAGE}" \
+                  || true
+
+              fi
+
+
+  # ==========================================================
+  # 5. FINAL STATUS
+  # ==========================================================
+
+  - name: "📡 Final Status"
+
+    dependencies:
+
+      - "🌐 Tailscale"
+
+    task:
+
+      jobs:
+
+        - name: "📊 Tailscale Status"
+
+          commands:
+
+
+            - echo "=========================================="
+            - echo "📡 FINAL TAILSCALE STATUS"
+            - echo "=========================================="
+
+
+            - |
+              if command -v tailscale >/dev/null 2>&1; then
+
+                sudo tailscale status || true
+
+                echo "------------------------------------------"
+
+                sudo tailscale ip -4 || true
+
+              fi
+
+
+            - echo "=========================================="
+            - echo "🍏 MACOS"
+            - echo "=========================================="
+
+            - sw_vers
+
+            - xcodebuild -version
+
+
+            # ------------------------------------------------
+            # Telegram
+            # ------------------------------------------------
+
+            - |
+              if [ -n "$TELEGRAM_TOKEN" ] && \
+                 [ -n "$TELEGRAM_CHAT_ID" ]; then
+
+                TS_IP="$(sudo tailscale ip -4 2>/dev/null | head -1 || true)"
+
+                MESSAGE="📡 Semaphore job masih aktif
+
+🍏 macOS: $(sw_vers -productVersion)
+🛠️ Xcode: $(xcodebuild -version | head -1)
+🖥️ Host: $(hostname)
+🌐 Tailscale IP: ${TS_IP:-unavailable}
+
+⚠️ Hosted runner bersifat sementara."
+
+                curl -fsS \
+                  -X POST \
+                  "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+                  --data-urlencode \
+                  "chat_id=${TELEGRAM_CHAT_ID}" \
+                  --data-urlencode \
+                  "text=${MESSAGE}" \
+                  || true
+
+              fi
+
+
+# ============================================================
+# AFTER PIPELINE
+# ============================================================
 
 after_pipeline:
+
   task:
+
     jobs:
-      - name: "Merge Reports 📊"
+
+      - name: "📊 Merge Test Reports"
+
         commands:
-          - test-results gen-pipeline-report  # Generate a summary of the test results
-          
-promotions:
-  - name: "Deploy to TestFlight"
-    pipeline_file: testflight-deploy.yml
-    auto_promote:
-      when: branch = 'main' AND result = 'passed'  # Automatically promote successful main branch builds to TestFlight
+
+
+          # --------------------------------------------------
+          # Generate report
+          # --------------------------------------------------
+
+          - |
+            test-results gen-pipeline-report || true
+
+
+          # --------------------------------------------------
+          # Telegram final
+          # --------------------------------------------------
+
+          - |
+            if [ -n "$TELEGRAM_TOKEN" ] && \
+               [ -n "$TELEGRAM_CHAT_ID" ]; then
+
+              MESSAGE="🏁 SEMAPHORE PIPELINE SELESAI
+
+📦 Pipeline: ${SEMAPHORE_PIPELINE_ID:-unknown}
+🌿 Branch: ${SEMAPHORE_GIT_BRANCH:-unknown}
+📝 Commit: ${SEMAPHORE_GIT_SHA:-unknown}"
+
+              curl -fsS \
+                -X POST \
+                "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+                --data-urlencode \
+                "chat_id=${TELEGRAM_CHAT_ID}" \
+                --data-urlencode \
+                "text=${MESSAGE}" \
+                || true
+
+            fi
+
+
+          # --------------------------------------------------
+          # End
+          # --------------------------------------------------
+
+          - echo "=========================================="
+          - echo "🏁 PIPELINE FINISHED"
+          - echo "=========================================="
+```
