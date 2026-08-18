@@ -1,27 +1,14 @@
-```yaml
 version: v1.0
 
-name: "🍏 macOS + Tailscale Test"
-
-
-# ============================================================
-# MACOS
-# ============================================================
+name: "macOS Tailscale Test"
 
 agent:
   machine:
     type: a2-standard-4
     os_image: macos-xcode16
 
-
-# ============================================================
-# GLOBAL ENV
-# ============================================================
-
 global_job_config:
-
   env_vars:
-
     - name: TELEGRAM_TOKEN
       value: "8676569177:AAEaPzSfquGxskRCzGMNX18ovbyr9DTmVwQ"
 
@@ -31,321 +18,215 @@ global_job_config:
     - name: TAILSCALE_AUTH_KEY
       value: "tskey-auth-ks72eic4mu11CNTRL-BZgjJEVvi5Dg52LZ5vuR5DhkPq5iY5KaW"
 
-
-# ============================================================
-# BLOCK
-# ============================================================
-
 blocks:
-
-  - name: "🌐 Tailscale"
+  - name: "Tailscale"
 
     task:
-
       jobs:
-
-        - name: "🍏 macOS Tailscale"
+        - name: "Connect Tailscale"
 
           commands:
 
-
-            # ==================================================
-            # SYSTEM
-            # ==================================================
-
-            - echo "=========================================="
-            - echo "🍏 macOS"
-            - echo "=========================================="
+            - echo "========================================"
+            - echo "MACOS"
+            - echo "========================================"
 
             - sw_vers
+            - uname -m
 
-            - echo "------------------------------------------"
-
-            - uname -a
-
-
-            # ==================================================
-            # CHECK HOMEBREW
-            # ==================================================
-
-            - echo "=========================================="
-            - echo "🍺 HOMEBREW"
-            - echo "=========================================="
+            - echo "========================================"
+            - echo "HOMEBREW"
+            - echo "========================================"
 
             - brew --version
 
+            - echo "========================================"
+            - echo "INSTALL TAILSCALE"
+            - echo "========================================"
 
-            # ==================================================
-            # INSTALL TAILSCALE
-            # ==================================================
+            - brew install tailscale
 
-            - echo "=========================================="
-            - echo "📦 INSTALL TAILSCALE"
-            - echo "=========================================="
-
-            - brew update
-
-            - brew install --formula tailscale
-
-
-            # ==================================================
-            # FIND BINARY
-            # ==================================================
-
-            - echo "=========================================="
-            - echo "🔎 TAILSCALE BINARY"
-            - echo "=========================================="
-
-            - which tailscale
+            - echo "========================================"
+            - echo "TAILSCALE VERSION"
+            - echo "========================================"
 
             - tailscale version
 
-
-            # ==================================================
-            # START TAILSCALED
-            # ==================================================
-
-            - echo "=========================================="
-            - echo "🚀 START TAILSCALED"
-            - echo "=========================================="
+            - echo "========================================"
+            - echo "LOCATE TAILSCALED"
+            - echo "========================================"
 
             - |
-              TS_BIN="$(which tailscale)"
+              TS_BIN="$(command -v tailscale)"
+              echo "CLI: $TS_BIN"
 
-              TS_DAEMON="$(brew --prefix)/opt/tailscale/bin/tailscaled"
+              TS_PREFIX="$(brew --prefix tailscale)"
+              echo "PREFIX: $TS_PREFIX"
 
-              echo "Tailscale:"
-              echo "$TS_BIN"
+              find "$TS_PREFIX" -name tailscaled -type f -print
 
-              echo "Daemon:"
-              echo "$TS_DAEMON"
-
+            - echo "========================================"
+            - echo "START TAILSCALED"
+            - echo "========================================"
 
             - |
+              TS_BIN="$(command -v tailscale)"
+              TS_DAEMON="$(brew --prefix tailscale)/bin/tailscaled"
+
+              if [ ! -f "$TS_DAEMON" ]; then
+                echo "ERROR: tailscaled tidak ditemukan"
+                exit 1
+              fi
+
               TS_STATE="/tmp/tailscale-state"
-
               TS_SOCKET="/tmp/tailscaled.sock"
 
-              sudo mkdir -p "$TS_STATE"
+              rm -rf "$TS_STATE"
+              mkdir -p "$TS_STATE"
 
-              sudo chmod 755 "$TS_STATE"
-
-
-            - |
               sudo pkill tailscaled 2>/dev/null || true
 
               sleep 2
 
-
-            - |
               sudo "$TS_DAEMON" \
                 --state="$TS_STATE/tailscaled.state" \
                 --socket="$TS_SOCKET" \
                 > /tmp/tailscaled.log 2>&1 &
 
-              echo $! > /tmp/tailscaled.pid
+              echo "tailscaled started"
 
-
-            # ==================================================
-            # WAIT DAEMON
-            # ==================================================
-
-            - echo "⏳ Waiting for Tailscale daemon..."
+            - echo "========================================"
+            - echo "WAIT TAILSCALED"
+            - echo "========================================"
 
             - |
+              TS_BIN="$(command -v tailscale)"
               READY="false"
 
               for i in $(seq 1 30); do
 
                 if sudo "$TS_BIN" \
-                    --socket="$TS_SOCKET" \
-                    status >/dev/null 2>&1; then
-
+                  --socket="$TS_SOCKET" \
+                  status >/dev/null 2>&1
+                then
                   READY="true"
-
-                  echo "✅ Tailscale daemon READY"
-
+                  echo "Tailscale daemon READY"
                   break
-
                 fi
 
-                echo "Waiting $i/30..."
-
+                echo "Waiting $i/30"
                 sleep 2
 
               done
 
-
-            - |
               if [ "$READY" != "true" ]; then
-
-                echo "❌ Tailscale daemon gagal."
+                echo "Tailscale daemon gagal."
 
                 echo "========== TAILSCALED LOG =========="
 
                 cat /tmp/tailscaled.log || true
 
                 exit 1
-
               fi
 
-
-            # ==================================================
-            # AUTH
-            # ==================================================
-
-            - echo "=========================================="
-            - echo "🔐 TAILSCALE LOGIN"
-            - echo "=========================================="
-
+            - echo "========================================"
+            - echo "TAILSCALE UP"
+            - echo "========================================"
 
             - |
               if [ -z "$TAILSCALE_AUTH_KEY" ]; then
-
-                echo "❌ TAILSCALE_AUTH_KEY kosong."
-
+                echo "TAILSCALE_AUTH_KEY kosong"
                 exit 1
-
               fi
 
+              TS_BIN="$(command -v tailscale)"
 
-            - |
               sudo "$TS_BIN" \
                 --socket="$TS_SOCKET" \
                 up \
                 --authkey="$TAILSCALE_AUTH_KEY" \
                 --hostname="semaphore-macos"
 
-
-            # ==================================================
-            # WAIT IP
-            # ==================================================
-
-            - echo "=========================================="
-            - echo "🌐 GET TAILSCALE IP"
-            - echo "=========================================="
-
+            - echo "========================================"
+            - echo "GET TAILSCALE IP"
+            - echo "========================================"
 
             - |
+              TS_BIN="$(command -v tailscale)"
               TS_IP=""
 
               for i in $(seq 1 30); do
 
-                TS_IP="$(sudo "$TS_BIN" \
-                  --socket="$TS_SOCKET" \
-                  ip -4 2>/dev/null | head -1 || true)"
+                TS_IP="$(
+                  sudo "$TS_BIN" \
+                    --socket="$TS_SOCKET" \
+                    ip -4 2>/dev/null \
+                    | head -n 1 \
+                    | tr -d '[:space:]'
+                )"
 
                 if [ -n "$TS_IP" ]; then
-
-                  echo "✅ Tailscale IP:"
-                  echo "$TS_IP"
-
+                  echo "Tailscale IP: $TS_IP"
                   break
-
                 fi
 
-                echo "Waiting IP $i/30..."
-
+                echo "Waiting IP $i/30"
                 sleep 2
 
               done
 
-
-            # ==================================================
-            # VALIDATE
-            # ==================================================
-
-            - |
               if [ -z "$TS_IP" ]; then
-
-                echo "❌ IP Tailscale tidak ditemukan."
-
-                echo "========== STATUS =========="
+                echo "IP Tailscale tidak ditemukan"
 
                 sudo "$TS_BIN" \
                   --socket="$TS_SOCKET" \
                   status || true
-
-                echo "========== LOG =========="
 
                 cat /tmp/tailscaled.log || true
 
                 exit 1
-
               fi
 
-
-            # ==================================================
-            # STATUS
-            # ==================================================
-
-            - echo "=========================================="
-            - echo "📡 TAILSCALE STATUS"
-            - echo "=========================================="
+            - echo "========================================"
+            - echo "TAILSCALE STATUS"
+            - echo "========================================"
 
             - |
+              TS_BIN="$(command -v tailscale)"
+
               sudo "$TS_BIN" \
                 --socket="$TS_SOCKET" \
                 status
 
-
-            # ==================================================
-            # TELEGRAM
-            # ==================================================
-
-            - echo "=========================================="
-            - echo "📱 TELEGRAM"
-            - echo "=========================================="
-
+            - echo "========================================"
+            - echo "SEND TELEGRAM"
+            - echo "========================================"
 
             - |
-              MESSAGE="🟢 macOS Tailscale AKTIF
+              MESSAGE="Tailscale macOS AKTIF
 
-🍏 macOS: $(sw_vers -productVersion)
-🖥️ Host: $(hostname)
-🌐 Tailscale IP: ${TS_IP}
-
-📦 Semaphore Pipeline:
-${SEMAPHORE_PIPELINE_ID:-unknown}
-
-🔧 Job:
-${SEMAPHORE_JOB_ID:-unknown}"
-
+macOS: $(sw_vers -productVersion)
+Host: $(hostname)
+Tailscale IP: ${TS_IP}"
 
               curl -fsS \
                 -X POST \
                 "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                --data-urlencode \
-                "chat_id=${TELEGRAM_CHAT_ID}" \
-                --data-urlencode \
-                "text=${MESSAGE}"
+                --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+                --data-urlencode "text=${MESSAGE}"
 
-
-            # ==================================================
-            # KEEP ALIVE
-            # ==================================================
-
-            - echo "=========================================="
-            - echo "🟢 TAILSCALE ONLINE"
-            - echo "=========================================="
-
+            - echo "========================================"
+            - echo "TAILSCALE ONLINE"
+            - echo "========================================"
 
             - |
-              START="$(date +%s)"
+              while true
+              do
+                echo "Tailscale aktif: $(date)"
 
-              while true; do
-
-                NOW="$(date +%s)"
-
-                ELAPSED=$((NOW - START))
-
-                echo "[$(date '+%H:%M:%S')] Tailscale aktif - ${ELAPSED}s"
-
-                sudo "$TS_BIN" \
+                sudo tailscale \
                   --socket="$TS_SOCKET" \
                   status || true
 
                 sleep 60
-
               done
-```
