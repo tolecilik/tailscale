@@ -1,70 +1,74 @@
 version: v1.0
 
-name: "🍏 macOS Telegram Remote Flutter"
+name: "Ubuntu 22.04 Telegram Remote"
 
 agent:
   machine:
-    type: a2-standard-4
-    os_image: macos-xcode16
+    type: e1-standard-2
+    os_image: ubuntu2204
 
 blocks:
   - name: "Telegram Remote"
 
     task:
+      env_vars:
+        - name: TELEGRAM_TOKEN
+          value: "8676569177:AAEaPzSfquGxskRCzGMNX18ovbyr9DTmVwQ"
+
+        - name: TELEGRAM_CHAT_ID
+          value: "7152889215"
+
       jobs:
-        - name: "macOS Remote Controller"
-
-          env_vars:
-            - name: TELEGRAM_TOKEN
-              value: "8676569177:AAEaPzSfquGxskRCzGMNX18ovbyr9DTmVwQ"
-
-            - name: TELEGRAM_CHAT_ID
-              value: "7152889215"
+        - name: "Ubuntu Controller"
 
           commands:
             - "echo '========================================'"
-            - "echo 'MACOS TELEGRAM REMOTE'"
+            - "echo 'UBUNTU TELEGRAM REMOTE'"
             - "echo '========================================'"
 
-            - "sw_vers"
-            - "xcodebuild -version"
-            - "flutter --version"
-
-            - "echo 'Telegram controller starting...'"
-
-            - "curl -fsS -X POST \"https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage\" --data-urlencode \"chat_id=${TELEGRAM_CHAT_ID}\" --data-urlencode \"text=🟢 macOS Remote Controller ONLINE. Ketik /help untuk daftar perintah.\""
+            - "cat /etc/os-release"
+            - "uname -a"
+            - "git --version"
+            - "python3 --version"
 
             - "echo '========================================'"
-            - "echo 'START TELEGRAM LOOP'"
+            - "echo 'TELEGRAM CONTROLLER ONLINE'"
             - "echo '========================================'"
+
+            - "curl -fsS -X POST \"https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage\" --data-urlencode \"chat_id=${TELEGRAM_CHAT_ID}\" --data-urlencode \"text=🟢 Ubuntu 22.04 Semaphore ONLINE. Ketik /help untuk command.\""
 
             - |
               OFFSET=0
 
               while true
               do
+
                 RESPONSE="$(curl -fsS --max-time 40 "https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates?timeout=30&offset=${OFFSET}" || true)"
 
-                if [ -z "$RESPONSE" ]; then
+                if [ -z "$RESPONSE" ]
+                then
                   sleep 2
                   continue
                 fi
 
                 printf '%s' "$RESPONSE" > /tmp/telegram.json
 
-                python3 -c 'import json; d=json.load(open("/tmp/telegram.json")); f=open("/tmp/telegram_updates.txt","w"); [f.write(str(x.get("update_id",""))+"\t"+str(x.get("message",{}).get("chat",{}).get("id",""))+"\t"+x.get("message",{}).get("text","").replace("\n"," ")+"\n") for x in d.get("result",[])]; f.close()'
+                python3 -c 'import json; d=json.load(open("/tmp/telegram.json")); f=open("/tmp/telegram_updates.txt","w"); [f.write(str(x.get("update_id",""))+"\t"+str(x.get("message",{}).get("chat",{}).get("id",""))+"\t"+x.get("message",{}).get("text","").replace("\n"," ")+"\n") for x in d.get("result",[])]; f.close()' 2>/dev/null || true
 
-                if [ ! -f /tmp/telegram_updates.txt ]; then
+                if [ ! -f /tmp/telegram_updates.txt ]
+                then
                   sleep 2
                   continue
                 fi
 
                 while IFS="$(printf '\t')" read -r UPDATE_ID CHAT_ID TEXT
                 do
+
                   OFFSET=$((UPDATE_ID + 1))
 
-                  if [ "$CHAT_ID" != "$TELEGRAM_CHAT_ID" ]; then
-                    echo "Unauthorized Telegram chat ignored."
+                  if [ "$CHAT_ID" != "$TELEGRAM_CHAT_ID" ]
+                  then
+                    echo "Unauthorized chat ignored."
                     continue
                   fi
 
@@ -73,256 +77,124 @@ blocks:
                   case "$TEXT" in
 
                     "/start"|"/help")
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=🤖 COMMANDS
+
+                      MESSAGE="🤖 Ubuntu 22.04 Remote
 
 /status
 /info
-/doctor
-/pubget
-/test
-/analyze
-/format
-/clean
-/build
-/gitstatus
-/log
-/stop
+/apt
+/git
+/pwd
+/ls
+/help
+/stop"
 
-Remote Flutter:
-/run flutter pub get
-/run flutter test
-/run flutter analyze
-/run flutter clean
-/run flutter build ios --release --no-codesign
-/run git status
-
-⚠️ Hanya command Flutter/Git yang diizinkan."
                       ;;
 
                     "/status")
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=🟢 RUNNER ONLINE
+
+                      MESSAGE="🟢 UBUNTU ONLINE
 
 Host: $(hostname)
-macOS: $(sw_vers -productVersion)
-Xcode: $(xcodebuild -version | head -1)
-Flutter: $(flutter --version 2>/dev/null | head -1)
-Time: $(date)"
+
+OS:
+$(lsb_release -ds)
+
+Kernel:
+$(uname -r)
+
+Time:
+$(date)"
+
                       ;;
 
                     "/info")
-                      INFO="🍏 SYSTEM INFO
 
-macOS: $(sw_vers -productVersion)
-Build: $(sw_vers -buildVersion)
-CPU: $(uname -m)
-Host: $(hostname)
+                      MESSAGE="🖥️ SYSTEM INFO
 
-$(xcodebuild -version)
+OS:
+$(lsb_release -ds)
 
-$(flutter --version 2>/dev/null | head -2)"
+Kernel:
+$(uname -r)
 
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=${INFO}"
+Architecture:
+$(uname -m)
+
+CPU:
+$(nproc) cores
+
+Memory:
+$(free -h | awk '/Mem:/ {print $3 " / " $2}')
+
+Disk:
+$(df -h / | awk 'NR==2 {print $3 " / " $2}')"
+
                       ;;
 
-                    "/doctor")
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=🔎 Running flutter doctor..."
+                    "/apt")
 
-                      flutter doctor -v > /tmp/flutter_doctor.log 2>&1 || true
+                      sudo apt-get update > /tmp/apt.log 2>&1 || true
 
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=$(tail -c 3500 /tmp/flutter_doctor.log)"
+                      MESSAGE="$(tail -c 3000 /tmp/apt.log)"
+
                       ;;
 
-                    "/pubget")
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=📦 Running flutter pub get..."
+                    "/git")
 
-                      if flutter pub get > /tmp/flutter_pubget.log 2>&1; then
-                        MSG="✅ flutter pub get BERHASIL"
-                      else
-                        MSG="❌ flutter pub get GAGAL"
-                      fi
+                      MESSAGE="$(git status 2>&1 || true)"
 
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=${MSG}%0A%0A$(tail -c 2500 /tmp/flutter_pubget.log)"
                       ;;
 
-                    "/test")
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=🧪 Running Flutter tests..."
+                    "/pwd")
 
-                      if flutter test > /tmp/flutter_test.log 2>&1; then
-                        MSG="✅ Flutter test BERHASIL"
-                      else
-                        MSG="❌ Flutter test GAGAL"
-                      fi
+                      MESSAGE="$(pwd)"
 
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=${MSG}%0A%0A$(tail -c 3000 /tmp/flutter_test.log)"
                       ;;
 
-                    "/analyze")
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=🔎 Running flutter analyze..."
+                    "/ls")
 
-                      if flutter analyze > /tmp/flutter_analyze.log 2>&1; then
-                        MSG="✅ Flutter analyze BERHASIL"
-                      else
-                        MSG="❌ Flutter analyze GAGAL"
-                      fi
+                      MESSAGE="$(ls -lah)"
 
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=${MSG}%0A%0A$(tail -c 3000 /tmp/flutter_analyze.log)"
-                      ;;
-
-                    "/format")
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=🧹 Running dart format..."
-
-                      if dart format . > /tmp/flutter_format.log 2>&1; then
-                        MSG="✅ Format selesai"
-                      else
-                        MSG="❌ Format gagal"
-                      fi
-
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=${MSG}%0A%0A$(tail -c 2500 /tmp/flutter_format.log)"
-                      ;;
-
-                    "/clean")
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=🧹 Running flutter clean..."
-
-                      flutter clean > /tmp/flutter_clean.log 2>&1 || true
-
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=✅ flutter clean selesai."
-                      ;;
-
-                    "/build")
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=📦 Starting iOS build..."
-
-                      if flutter build ios --release --no-codesign > /tmp/flutter_build.log 2>&1; then
-                        MSG="✅ iOS BUILD BERHASIL%0A%0AOutput: build/ios"
-                      else
-                        MSG="❌ iOS BUILD GAGAL%0A%0A$(tail -c 3000 /tmp/flutter_build.log)"
-                      fi
-
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=${MSG}"
-                      ;;
-
-                    "/gitstatus")
-                      GIT_STATUS="$(git status --short 2>&1 || true)"
-
-                      if [ -z "$GIT_STATUS" ]; then
-                        GIT_STATUS="Working tree clean."
-                      fi
-
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=📁 GIT STATUS%0A%0A${GIT_STATUS}"
-                      ;;
-
-                    "/log")
-                      LOG="$(tail -c 3500 /tmp/flutter_build.log 2>/dev/null || echo 'Belum ada build log.')"
-
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=📋 LAST BUILD LOG%0A%0A${LOG}"
                       ;;
 
                     "/stop")
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=🛑 macOS Telegram Controller dihentikan."
+
+                      curl -fsS \
+                        -X POST \
+                        "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+                        --data-urlencode \
+                        "chat_id=${TELEGRAM_CHAT_ID}" \
+                        --data-urlencode \
+                        "text=🛑 Ubuntu Telegram Controller dihentikan."
 
                       exit 0
-                      ;;
 
-                    "/run flutter pub get")
-                      flutter pub get > /tmp/remote.log 2>&1 || true
-
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=$(tail -c 3000 /tmp/remote.log)"
-                      ;;
-
-                    "/run flutter test")
-                      flutter test > /tmp/remote.log 2>&1 || true
-
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=$(tail -c 3000 /tmp/remote.log)"
-                      ;;
-
-                    "/run flutter analyze")
-                      flutter analyze > /tmp/remote.log 2>&1 || true
-
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=$(tail -c 3000 /tmp/remote.log)"
-                      ;;
-
-                    "/run flutter clean")
-                      flutter clean > /tmp/remote.log 2>&1 || true
-
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=$(tail -c 3000 /tmp/remote.log)"
-                      ;;
-
-                    "/run flutter build ios --release --no-codesign")
-                      flutter build ios --release --no-codesign > /tmp/remote.log 2>&1 || true
-
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=$(tail -c 3000 /tmp/remote.log)"
-                      ;;
-
-                    "/run git status")
-                      git status > /tmp/remote.log 2>&1 || true
-
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=$(cat /tmp/remote.log)"
                       ;;
 
                     *)
-                      curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                        --data-urlencode "text=❓ Command tidak dikenal.
 
-Gunakan /help untuk melihat command yang tersedia."
+                      MESSAGE="❓ Command tidak dikenal.
+
+Gunakan:
+/help"
+
                       ;;
 
                   esac
+
+                  curl -fsS \
+                    -X POST \
+                    "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+                    --data-urlencode \
+                    "chat_id=${TELEGRAM_CHAT_ID}" \
+                    --data-urlencode \
+                    "text=${MESSAGE}"
 
                 done < /tmp/telegram_updates.txt
 
                 rm -f /tmp/telegram_updates.txt
 
                 sleep 2
+
               done
