@@ -4,44 +4,43 @@ agent:
   machine:
     type: a2-standard-4
     os_image: macos-xcode16
-global_job_config:
-  env_vars:
-    - name: TELEGRAM_TOKEN
-      value: '8676569177:AAEaPzSfquGxskRCzGMNX18ovbyr9DTmVwQ'
-    - name: 7152889215
-      value: CHAT_ID_BARU
-    - name: TAILSCALE_AUTH_KEY
-      value: tskey-auth-ks72eic4mu11CNTRL-BZgjJEVvi5Dg52LZ5vuR5DhkPq5iY5KaW
 blocks:
   - name: Tailscale
     task:
       jobs:
         - name: Connect Tailscale
+          env_vars:
+            - name: TELEGRAM_TOKEN
+              value: '8676569177:AAEaPzSfquGxskRCzGMNX18ovbyr9DTmVwQ'
+            - name: TELEGRAM_CHAT_ID
+              value: '7152889215'
+            - name: TAILSCALE_AUTH_KEY
+              value: tskey-auth-ks72eic4mu11CNTRL-BZgjJEVvi5Dg52LZ5vuR5DhkPq5iY5KaW
           commands:
-            - echo "MACOS"
+            - echo MACOS
             - sw_vers
-            - echo "HOMEBREW"
+            - echo HOMEBREW
             - brew --version
-            - echo "INSTALL TAILSCALE"
+            - echo INSTALL TAILSCALE
             - brew install tailscale
-            - echo "TAILSCALE VERSION"
+            - echo TAILSCALE VERSION
             - tailscale version
-            - echo "TAILSCALE PATH"
+            - echo TAILSCALE PATH
             - which tailscale
-            - echo "TAILSCALED PATH"
+            - echo TAILSCALED PATH
             - which tailscaled
-            - echo "START TAILSCALED"
+            - echo START TAILSCALED
             - sudo tailscaled --state=/tmp/tailscaled.state --socket=/tmp/tailscaled.sock > /tmp/tailscaled.log 2>&1 &
             - sleep 5
-            - echo "TAILSCALED STATUS"
+            - echo CHECK TAILSCALED
             - sudo tailscale --socket=/tmp/tailscaled.sock status
-            - echo "TAILSCALE LOGIN"
-            - sudo tailscale --socket=/tmp/tailscaled.sock up --authkey="$TAILSCALE_AUTH_KEY" --hostname="semaphore-macos"
-            - echo "TAILSCALE IP"
+            - echo TAILSCALE LOGIN
+            - sudo tailscale --socket=/tmp/tailscaled.sock up --authkey="$TAILSCALE_AUTH_KEY" --hostname=semaphore-macos
+            - echo TAILSCALE IP
             - sudo tailscale --socket=/tmp/tailscaled.sock ip -4
-            - echo "TAILSCALE STATUS"
+            - echo TAILSCALE STATUS
             - sudo tailscale --socket=/tmp/tailscaled.sock status
-            - echo "SEND TELEGRAM"
-            - 'curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text=macOS Tailscale aktif. IP': $(sudo tailscale --socket=/tmp/tailscaled.sock ip -4)"
-            - echo "TAILSCALE ONLINE"
+            - echo SEND TELEGRAM
+            - 'curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text=macOS Tailscale aktif. IP: $(sudo tailscale --socket=/tmp/tailscaled.sock ip -4)"'
+            - echo TAILSCALE ONLINE
             - sleep 3600
