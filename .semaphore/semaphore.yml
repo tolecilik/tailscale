@@ -1,232 +1,47 @@
 version: v1.0
-
-name: "macOS Tailscale Test"
-
+name: macOS Tailscale Test
 agent:
   machine:
     type: a2-standard-4
     os_image: macos-xcode16
-
 global_job_config:
   env_vars:
     - name: TELEGRAM_TOKEN
-      value: "8676569177:AAEaPzSfquGxskRCzGMNX18ovbyr9DTmVwQ"
-
-    - name: TELEGRAM_CHAT_ID
-      value: "7152889215"
-
+      value: '8676569177:AAEaPzSfquGxskRCzGMNX18ovbyr9DTmVwQ'
+    - name: 7152889215
+      value: CHAT_ID_BARU
     - name: TAILSCALE_AUTH_KEY
-      value: "tskey-auth-ks72eic4mu11CNTRL-BZgjJEVvi5Dg52LZ5vuR5DhkPq5iY5KaW"
-
+      value: tskey-auth-ks72eic4mu11CNTRL-BZgjJEVvi5Dg52LZ5vuR5DhkPq5iY5KaW
 blocks:
-  - name: "Tailscale"
-
+  - name: Tailscale
     task:
       jobs:
-        - name: "Connect Tailscale"
-
+        - name: Connect Tailscale
           commands:
-
-            - echo "========================================"
             - echo "MACOS"
-            - echo "========================================"
-
             - sw_vers
-            - uname -m
-
-            - echo "========================================"
             - echo "HOMEBREW"
-            - echo "========================================"
-
             - brew --version
-
-            - echo "========================================"
             - echo "INSTALL TAILSCALE"
-            - echo "========================================"
-
             - brew install tailscale
-
-            - echo "========================================"
             - echo "TAILSCALE VERSION"
-            - echo "========================================"
-
             - tailscale version
-
-            - echo "========================================"
-            - echo "LOCATE TAILSCALED"
-            - echo "========================================"
-
-            - |
-              TS_BIN="$(command -v tailscale)"
-              echo "CLI: $TS_BIN"
-
-              TS_PREFIX="$(brew --prefix tailscale)"
-              echo "PREFIX: $TS_PREFIX"
-
-              find "$TS_PREFIX" -name tailscaled -type f -print
-
-            - echo "========================================"
+            - echo "TAILSCALE PATH"
+            - which tailscale
+            - echo "TAILSCALED PATH"
+            - which tailscaled
             - echo "START TAILSCALED"
-            - echo "========================================"
-
-            - |
-              TS_BIN="$(command -v tailscale)"
-              TS_DAEMON="$(brew --prefix tailscale)/bin/tailscaled"
-
-              if [ ! -f "$TS_DAEMON" ]; then
-                echo "ERROR: tailscaled tidak ditemukan"
-                exit 1
-              fi
-
-              TS_STATE="/tmp/tailscale-state"
-              TS_SOCKET="/tmp/tailscaled.sock"
-
-              rm -rf "$TS_STATE"
-              mkdir -p "$TS_STATE"
-
-              sudo pkill tailscaled 2>/dev/null || true
-
-              sleep 2
-
-              sudo "$TS_DAEMON" \
-                --state="$TS_STATE/tailscaled.state" \
-                --socket="$TS_SOCKET" \
-                > /tmp/tailscaled.log 2>&1 &
-
-              echo "tailscaled started"
-
-            - echo "========================================"
-            - echo "WAIT TAILSCALED"
-            - echo "========================================"
-
-            - |
-              TS_BIN="$(command -v tailscale)"
-              READY="false"
-
-              for i in $(seq 1 30); do
-
-                if sudo "$TS_BIN" \
-                  --socket="$TS_SOCKET" \
-                  status >/dev/null 2>&1
-                then
-                  READY="true"
-                  echo "Tailscale daemon READY"
-                  break
-                fi
-
-                echo "Waiting $i/30"
-                sleep 2
-
-              done
-
-              if [ "$READY" != "true" ]; then
-                echo "Tailscale daemon gagal."
-
-                echo "========== TAILSCALED LOG =========="
-
-                cat /tmp/tailscaled.log || true
-
-                exit 1
-              fi
-
-            - echo "========================================"
-            - echo "TAILSCALE UP"
-            - echo "========================================"
-
-            - |
-              if [ -z "$TAILSCALE_AUTH_KEY" ]; then
-                echo "TAILSCALE_AUTH_KEY kosong"
-                exit 1
-              fi
-
-              TS_BIN="$(command -v tailscale)"
-
-              sudo "$TS_BIN" \
-                --socket="$TS_SOCKET" \
-                up \
-                --authkey="$TAILSCALE_AUTH_KEY" \
-                --hostname="semaphore-macos"
-
-            - echo "========================================"
-            - echo "GET TAILSCALE IP"
-            - echo "========================================"
-
-            - |
-              TS_BIN="$(command -v tailscale)"
-              TS_IP=""
-
-              for i in $(seq 1 30); do
-
-                TS_IP="$(
-                  sudo "$TS_BIN" \
-                    --socket="$TS_SOCKET" \
-                    ip -4 2>/dev/null \
-                    | head -n 1 \
-                    | tr -d '[:space:]'
-                )"
-
-                if [ -n "$TS_IP" ]; then
-                  echo "Tailscale IP: $TS_IP"
-                  break
-                fi
-
-                echo "Waiting IP $i/30"
-                sleep 2
-
-              done
-
-              if [ -z "$TS_IP" ]; then
-                echo "IP Tailscale tidak ditemukan"
-
-                sudo "$TS_BIN" \
-                  --socket="$TS_SOCKET" \
-                  status || true
-
-                cat /tmp/tailscaled.log || true
-
-                exit 1
-              fi
-
-            - echo "========================================"
+            - sudo tailscaled --state=/tmp/tailscaled.state --socket=/tmp/tailscaled.sock > /tmp/tailscaled.log 2>&1 &
+            - sleep 5
+            - echo "TAILSCALED STATUS"
+            - sudo tailscale --socket=/tmp/tailscaled.sock status
+            - echo "TAILSCALE LOGIN"
+            - sudo tailscale --socket=/tmp/tailscaled.sock up --authkey="$TAILSCALE_AUTH_KEY" --hostname="semaphore-macos"
+            - echo "TAILSCALE IP"
+            - sudo tailscale --socket=/tmp/tailscaled.sock ip -4
             - echo "TAILSCALE STATUS"
-            - echo "========================================"
-
-            - |
-              TS_BIN="$(command -v tailscale)"
-
-              sudo "$TS_BIN" \
-                --socket="$TS_SOCKET" \
-                status
-
-            - echo "========================================"
+            - sudo tailscale --socket=/tmp/tailscaled.sock status
             - echo "SEND TELEGRAM"
-            - echo "========================================"
-
-            - |
-              MESSAGE="Tailscale macOS AKTIF
-
-macOS: $(sw_vers -productVersion)
-Host: $(hostname)
-Tailscale IP: ${TS_IP}"
-
-              curl -fsS \
-                -X POST \
-                "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-                --data-urlencode "text=${MESSAGE}"
-
-            - echo "========================================"
+            - 'curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text=macOS Tailscale aktif. IP': $(sudo tailscale --socket=/tmp/tailscaled.sock ip -4)"
             - echo "TAILSCALE ONLINE"
-            - echo "========================================"
-
-            - |
-              while true
-              do
-                echo "Tailscale aktif: $(date)"
-
-                sudo tailscale \
-                  --socket="$TS_SOCKET" \
-                  status || true
-
-                sleep 60
-              done
+            - sleep 3600
